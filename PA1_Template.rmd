@@ -1,0 +1,195 @@
+---
+title: 'Reproducible Research: Peer Assessment 1'
+output: html_document
+---
+
+Loading and preprocessing the data
+==================================================================================
+```{r}
+########################################################################################################################################################
+#1
+## Sets up directories for raw data and downloads data if the appropriate file paths have not already been created.
+	
+	wd1 <- "F:/My Documents/Personal Files/Projects/Coursera/Reproducible Research/Assignment1"
+
+	setwd(wd1)
+
+	ProjectDirectory <- getwd()
+
+	URL <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+		
+	if(!file.exists("./DATA")) {
+		download.file(url = URL, destfile = "./DATA/data.zip")
+		unzip("./DATA/data.zip", exdir = "./DATA")
+		file.remove("./DATA/data.zip")
+	}
+
+	DataDirectory <- "./DATA"
+
+########################################################################################################################################################
+#2
+## Loads raw data and cleans up to ready data set for analysis.
+	
+	setwd(DataDirectory)
+
+	Activity <- read.csv("./activity.csv", header = TRUE, colClasses = c("numeric", "character", "factor"))
+
+	Activity$date <- as.Date(Activity$date)
+
+	## Saves the orginal form of the Activity Data Set.
+	Activity_Original <- Activity
+
+	## Creates a version of the Activity data set aggregated by 5 minute time interval with number of steps taken as an average over all days.
+	Activity_Interval <- aggregate(steps ~ interval, mean, data = Activity)
+
+	## Creates a version of the Activity data set aggregated by day with number of steps taken as an sum over all time intervals.
+	Activity_Day <- aggregate(steps ~ date, sum, data = Activity)
+```
+
+What is mean total number of steps taken per day?
+=================================================================================
+
+```{r}
+#3
+## Calculates the total number of steps taken per day.
+##	The "Activity_Day" data set gives the total number of steps taken per day.
+## Makes a histogram of the total number of steps taken each day.
+## 	The image for this histogram is outputted as "TotalStepsPerDay_Histogram.png".
+## Calculates and reports the mean and median of the total number of steps taken per day.
+
+	##!! Need to clean up axis labels and title
+	TotalStepsPerDay <- hist(Activity_Day$steps)
+
+	png(paste(ProjectDirectory, "/", "TotalStepsPerDay_Histogram.png", sep = ""))
+	plot(TotalStepsPerDay)
+	dev.off()
+
+	MeanStepsPerDay <- summary(Activity_Day$steps)[4]
+	MedianStepsPerDay <- summary(Activity_Day$steps)[3]
+	
+	plot(TotalStepsPerDay)
+	MeanStepsPerDay
+	MedianStepsPerDay
+```
+
+What is the average daily activity pattern?
+==================================================================================
+
+```{r}
+#4
+## Makes a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).
+## 	The image for this time series is outputted as "AvgStepsPerInterval_TimeSeries.png".
+## In addition, it is determined which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps.
+
+	if(!("lattice" %in% rownames(installed.packages()))) {
+		install.packages("lattice")
+	}
+	
+	library(lattice)
+
+	##!! Need to clean up plot so the x-axis labels can be read.
+	##!! Need to add title and clean up axis labels
+	AvgStepsPerInterval <- xyplot(steps ~ interval, data = Activity_Interval, type = "l")
+
+	##!! Determine if the image can be saved with a different width and height to make the graph better displayed for reading 
+	png(paste(ProjectDirectory, "/", "AvgStepsPerInterval_TimeSeries.png", sep = ""))
+	AvgStepsPerInterval
+	dev.off()
+	
+	## This designates the interval with the lagest average number of steps across all days
+	Max_Interval <- Activity_Interval[which.max(Activity_Interval$steps), 1]
+	
+	AvgStepsPerInterval
+	Max_Interval
+```
+
+Imputing missing values
+=================================================================================
+
+```{r}
+########################################################################################################################################################
+#5
+## This section deals with missing values coded as "NA" in the Activity_Orginal data set
+
+	if(!("plyr" %in% rownames(installed.packages()))) {
+		install.packages("plyr")
+	}
+	
+	library(plyr)
+
+	## Calculates the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+	temp <- table(Activity$steps, useNA = "always")
+	NAs <- temp[dim(temp)]
+
+	## The stratgey for filling in NA values will be to take the average value for the the particular 5 minute interval for each NA.
+	## This section of code follows through with that strategy to create a new data set with the NAs filled in based on the orginal data set.
+	Activity_NA <- Activity
+
+	impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+	Activity_NA <- ddply(Activity_NA, ~ interval, transform, steps = impute.mean(steps))
+
+	## Creates a version of the Activity_NA data set aggregated by day with number of steps taken as an sum over all time intervals.
+	Activity_NA_Day <- aggregate(steps ~ date, sum, data = Activity_NA)
+
+	## Makes a histogram of the total number of steps taken each day.
+	## 	The image for this histogram is outputted as "TotalStepsPerDayNA_Histogram.png".
+	## Calculates and reports the mean and median of the total number of steps taken per day.
+
+	##!! Need to clean up axis labels and title
+	TotalStepsPerDayNA <- hist(Activity_NA_Day$steps)
+
+	png(paste(ProjectDirectory, "/", "TotalStepsPerDayNA_Histogram.png", sep = ""))
+	plot(TotalStepsPerDayNA)
+	dev.off()
+
+	MeanStepsPerDayNA <- summary(Activity_NA_Day$steps)[4]
+	MedianStepsPerDayNA <- summary(Activity_NA_Day$steps)[3]
+	
+	plot(TotalStepsPerDayNA)
+```
+
+Are there differences in activity patterns between weekdays and weekends?
+=================================================================================
+
+```{r}
+########################################################################################################################################################
+#6
+## This section deals with weekday/weekend classifications per assignment instructions.
+
+	if(!("lattice" %in% rownames(installed.packages()))) {
+		install.packages("lattice")
+	}
+	
+	library(lattice)
+
+	## Creates a new data set from the orginal Activity data set with a factor variable that distinguishes weekdays from weekends.
+	Activity_Weekday <- Activity
+	Activity_Weekday$Day <- weekdays(Activity$date)
+
+	WeekDays <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+	WeekEnds <- c("Saturday", "Sunday")
+
+	Activity_Weekday$WeekDayClass <- rep(NA, nrow(Activity_Weekday))
+
+	i <- 1
+	while(i <= nrow(Activity_Weekday)) {
+		if(Activity_Weekday[i, 4] %in% WeekDays) {
+			Activity_Weekday[i, 5] <- "Weekday"
+			i <- i + 1
+		} else if(Activity_Weekday[i, 4] %in% WeekEnds) {
+			Activity_Weekday[i, 5] <- "Weekend"
+			i <- i + 1
+		}
+	}
+
+	Activity_Weekday_Interval <- aggregate(steps ~ interval + WeekDayClass, mean, data = Activity_Weekday)
+
+	AvgStepsPerIntervalWeekday <- xyplot(steps ~ interval | WeekDayClass, data = Activity_Weekday_Interval, type = "l")
+
+	png(paste(ProjectDirectory, "/", "AvgStepsPerIntervalWeekday_TimeSeries.png", sep = ""))
+	AvgStepsPerIntervalWeekday
+	dev.off()
+
+	AvgStepsPerIntervalWeekday
+```
+
